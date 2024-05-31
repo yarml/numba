@@ -4,7 +4,7 @@ use std::{
   path::PathBuf,
 };
 
-use crate::matrix::Matrix;
+use crate::matrix::{Matrix, MatrixInHost};
 
 pub fn load_labeled_images(
   images_path: PathBuf,
@@ -55,13 +55,13 @@ pub fn load_labeled_images(
       labels.read_exact(&mut label).unwrap();
       label[0] as usize
     };
-    let mut matrix = Matrix::new(rows, cols);
+    let mut matrix = MatrixInHost::new(rows, cols);
     for j in 0..cols {
       for i in 0..rows {
         matrix[(i, j)] = pixels[j * cols + i] as f32 / 255.0;
       }
     }
-    labeled_images.push((label, matrix));
+    labeled_images.push((label, matrix.to_device()));
   }
 
   labeled_images
