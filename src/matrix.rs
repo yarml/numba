@@ -27,7 +27,9 @@ impl Matrix {
       data: vec![0.0; rows * cols],
     }
   }
-
+  pub fn shape(&self) -> (usize, usize) {
+    (self.rows, self.cols)
+  }
   pub fn at(&self, row: usize, col: usize) -> &f32 {
     &self.data[row * self.cols + col]
   }
