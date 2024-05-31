@@ -46,69 +46,82 @@ NumbaMatrix::~NumbaMatrix() {
   }
 }
 
+NumbaMatrix &NumbaMatrix::operator=(NumbaMatrix &&other) {
+  if (this->elements) {
+    delete[] this->elements;
+  }
+  nRows = other.nRows;
+  nCols = other.nCols;
+  elements = other.elements;
+  other.elements = nullptr;
+  return *this;
+}
+
 pair<int, int> NumbaMatrix::shape() const { return make_pair(nRows, nCols); }
 float &NumbaMatrix::at(int i, int j) const { return elements[i * nCols + j]; }
 
-NumbaMatrix NumbaMatrix::add(NumbaMatrix const &b_mat) const {
-  assert(shape() == b_mat.shape());
+NumbaMatrix NumbaMatrix::add(NumbaMatrix const &bMat) const {
+  assert(shape() == bMat.shape());
 
   float *a, *b, *c;
   size_t size = nRows * nCols * sizeof(float);
 
-  cudaMalloc(&a, size);
-  cudaMalloc(&b, size);
-  cudaMalloc(&c, size);
+  cout << "bye" << endl;
+  exit(0);
+  gpuErrchk(cudaMalloc(&a, size));
+  gpuErrchk(cudaMalloc(&b, size));
+  gpuErrchk(cudaMalloc(&c, size));
 
-  cudaMemcpy(a, elements, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(b, b_mat.elements, size, cudaMemcpyHostToDevice);
+  gpuErrchk(cudaMemcpy(a, elements, size, cudaMemcpyHostToDevice));
+  gpuErrchk(cudaMemcpy(b, bMat.elements, size, cudaMemcpyHostToDevice));
 
   addVec<<<(nRows * nCols + 255) / 256, 256>>>(a, b, c, nRows * nCols);
   gpuErrchk(cudaPeekAtLastError());
-  cudaDeviceSynchronize();
+  gpuErrchk(cudaDeviceSynchronize());
 
   NumbaMatrix c_mat(nRows, nCols);
-  cudaMemcpy(c_mat.elements, c, size, cudaMemcpyDeviceToHost);
+  gpuErrchk(cudaMemcpy(c_mat.elements, c, size, cudaMemcpyDeviceToHost));
 
-  cudaFree(a);
-  cudaFree(b);
-  cudaFree(c);
+  gpuErrchk(cudaFree(a));
+  gpuErrchk(cudaFree(b));
+  gpuErrchk(cudaFree(c));
 
-  return c_mat;
+  return move(c_mat);
 }
-NumbaMatrix NumbaMatrix::mul(NumbaMatrix const &b_mat) const {
-  assert(nCols == b_mat.nRows);
+NumbaMatrix NumbaMatrix::mul(NumbaMatrix const &bMat) const {
+  assert(nCols == bMat.nRows);
 
   float *a, *b, *c;
   size_t size = nRows * nCols * sizeof(float);
 
-  cudaMalloc(&a, size);
-  cudaMalloc(&b, size);
-  cudaMalloc(&c, size);
+  gpuErrchk(cudaMalloc(&a, size));
+  gpuErrchk(cudaMalloc(&b, size));
+  gpuErrchk(cudaMalloc(&c, size));
 
-  cudaMemcpy(a, elements, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(b, b_mat.elements, size, cudaMemcpyHostToDevice);
+  gpuErrchk(cudaMemcpy(a, elements, size, cudaMemcpyHostToDevice));
+  gpuErrchk(cudaMemcpy(b, bMat.elements, size, cudaMemcpyHostToDevice));
 
   dim3 threadsPerBlock(16, 16);
-  dim3 numBlocks((nRows + 15) / 16, (b_mat.nCols + 15) / 16);
-  mulMat<<<numBlocks, threadsPerBlock>>>(a, b, c, nRows, b_mat.nCols);
+  dim3 numBlocks((nRows + 15) / 16, (bMat.nCols + 15) / 16);
+  mulMat<<<numBlocks, threadsPerBlock>>>(a, b, c, nRows, bMat.nCols);
   gpuErrchk(cudaPeekAtLastError());
-  cudaDeviceSynchronize();
+  gpuErrchk(cudaDeviceSynchronize());
 
-  NumbaMatrix c_mat(nRows, b_mat.nCols);
-  cudaMemcpy(c_mat.elements, c, size, cudaMemcpyDeviceToHost);
+  NumbaMatrix c_mat(nRows, bMat.nCols);
+  gpuErrchk(cudaMemcpy(c_mat.elements, c, size, cudaMemcpyDeviceToHost));
 
-  cudaFree(a);
-  cudaFree(b);
-  cudaFree(c);
+  gpuErrchk(cudaFree(a));
+  gpuErrchk(cudaFree(b));
+  gpuErrchk(cudaFree(c));
 
-  return c_mat;
+  return move(c_mat);
 }
 NumbaMatrix NumbaMatrix::scale(float scale) const {
   float *a, *b;
   size_t size = nRows * nCols * sizeof(float);
 
-  cudaMalloc(&a, size);
-  cudaMalloc(&b, size);
+  gpuErrchk(cudaMalloc(&a, size));
+  gpuErrchk(cudaMalloc(&b, size));
 
   cudaMemcpy(a, elements, size, cudaMemcpyHostToDevice);
 
@@ -116,20 +129,25 @@ NumbaMatrix NumbaMatrix::scale(float scale) const {
   gpuErrchk(cudaPeekAtLastError());
   cudaDeviceSynchronize();
 
-  NumbaMatrix b_mat(nRows, nCols);
-  cudaMemcpy(b_mat.elements, b, size, cudaMemcpyDeviceToHost);
+  NumbaMatrix bMat(nRows, nCols);
+  cudaMemcpy(bMat.elements, b, size, cudaMemcpyDeviceToHost);
 
-  cudaFree(a);
-  cudaFree(b);
+  gpuErrchk(cudaFree(a));
+  gpuErrchk(cudaFree(b));
 
-  return b_mat;
+  return move(bMat);
+}
+NumbaMatrix NumbaMatrix::linearize() const {
+  NumbaMatrix result(nRows * nCols, 1);
+  memcpy(result.elements, elements, nRows * nCols * sizeof(float));
+  return move(result);
 }
 
 float &NumbaMatrix::operator()(int i, int j) const { return at(i, j); }
-NumbaMatrix NumbaMatrix::operator+(NumbaMatrix const &b_mat) const {
-  return add(b_mat);
+NumbaMatrix NumbaMatrix::operator+(NumbaMatrix const &bMat) const {
+  return move(add(bMat));
 }
-NumbaMatrix NumbaMatrix::operator*(NumbaMatrix const &b_mat) const {
-  return mul(b_mat);
+NumbaMatrix NumbaMatrix::operator*(NumbaMatrix const &bMat) const {
+  return move(mul(bMat));
 }
-NumbaMatrix NumbaMatrix::operator*(float s) const { return scale(s); }
+NumbaMatrix NumbaMatrix::operator*(float s) const { return move(scale(s)); }

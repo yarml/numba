@@ -6,24 +6,24 @@
 
 using namespace std;
 
-vector<pair<int, NumbaMatrix>> loadLabeledImages(char const *images_path,
-                                                 char const *labels_path) {
-  vector<pair<int, NumbaMatrix>> labeled_images;
-  ifstream images(images_path, ios::binary);
-  ifstream labels(labels_path, ios::binary);
+vector<pair<int, NumbaMatrix>> loadLabeledImages(char const *imagesPath,
+                                                 char const *labelsPath) {
+  vector<pair<int, NumbaMatrix>> labeledImages;
+  ifstream images(imagesPath, ios::binary);
+  ifstream labels(labelsPath, ios::binary);
   assert(images.is_open());
   assert(labels.is_open());
 
-  uint32_t images_magic, labels_magic;
+  uint32_t imagesMagic, labelsMagic;
 
-  images.read((char *)&images_magic, sizeof(images_magic));
-  labels.read((char *)&labels_magic, sizeof(labels_magic));
+  images.read((char *)&imagesMagic, sizeof(imagesMagic));
+  labels.read((char *)&labelsMagic, sizeof(labelsMagic));
 
-  images_magic = ntohl(images_magic);
-  labels_magic = ntohl(labels_magic);
+  imagesMagic = ntohl(imagesMagic);
+  labelsMagic = ntohl(labelsMagic);
 
-  assert(images_magic == 0x803);
-  assert(labels_magic == 0x801);
+  assert(imagesMagic == 0x803);
+  assert(labelsMagic == 0x801);
 
   uint32_t nImages1, nImages2;
 
@@ -58,8 +58,8 @@ vector<pair<int, NumbaMatrix>> loadLabeledImages(char const *images_path,
     }
     uint8_t label;
     labels.read((char *)&label, sizeof(label));
-    labeled_images.push_back(make_pair(label, move(image)));
+    labeledImages.push_back(make_pair(label, move(image)));
   }
 
-  return labeled_images;
+  return move(labeledImages);
 }

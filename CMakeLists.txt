@@ -18,10 +18,11 @@ file(GLOB_RECURSE NumbaSources src/*.cu src/*.cc)
 add_executable(
   Numba
   ${NumbaSources}
-)
+  )
 target_include_directories(
   Numba
   PRIVATE
   inc
-)
+  )
 target_link_libraries(Numba raylib)
+set_property(TARGET Numba PROPERTY CUDA_ARCHITECTURES 80)
