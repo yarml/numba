@@ -74,6 +74,16 @@ impl Model {
     output.mse(&expectation)
   }
 
+  pub fn evaluate_all(&self, data: &[(usize, Matrix)]) -> usize {
+    data
+      .iter()
+      .filter(|(label, input)| {
+        let output = self.apply(input.clone()).to_host().max_idx();
+        output == *label
+      })
+      .count()
+  }
+
   // Returns ∇C(b, w)
   pub fn backdrop_once(
     &self,
@@ -81,21 +91,14 @@ impl Model {
     expectation: Matrix,
   ) -> (Vec<Matrix>, Vec<Matrix>) {
     assert_eq!(expectation.shape(), self.output_shape());
-    let mut nabla_biases: Vec<_> = self
-      .biases
-      .iter()
-      .map(|bias| Matrix::new(bias.shape().0, bias.shape().1))
-      .collect();
-    let mut nabla_weights: Vec<_> = self
-      .weights
-      .iter()
-      .map(|weight| Matrix::new(weight.shape().0, weight.shape().1))
-      .collect();
+    let mut nabla_biases: Vec<_> =
+      self.biases.iter().map(|_| Matrix::new(0, 0)).collect();
+    let mut nabla_weights: Vec<_> =
+      self.weights.iter().map(|_| Matrix::new(0, 0)).collect();
     let (layers, full_layers) = self.impl_run_model(input);
     let cost_deriv = layers.last().unwrap() - &expectation;
-    let mut delta = cost_deriv
-      .element_mul(&layers.last().unwrap().sigmoid_prime())
-      .scale(2.0);
+    let mut delta =
+      cost_deriv.element_mul(&layers.last().unwrap().sigmoid_prime());
     *nabla_biases.last_mut().unwrap() = delta.clone();
     *nabla_weights.last_mut().unwrap() =
       &delta * &layers[layers.len() - 2].transpose();
@@ -108,6 +111,85 @@ impl Model {
       nabla_biases[idx] = delta.clone();
       nabla_weights[idx] = &delta * &layers[layers.len() - l - 1].transpose();
     }
+    (nabla_biases, nabla_weights)
+  }
+
+  pub fn train_once_all(
+    &self,
+    training_data: &[(Matrix, Matrix)],
+  ) -> (Vec<Matrix>, Vec<Matrix>) {
+    let mut nabla_biases: Vec<_> = self
+      .biases
+      .iter()
+      .map(|b| Matrix::new(b.shape().0, b.shape().1))
+      .collect();
+    let mut nabla_weights: Vec<_> = self
+      .weights
+      .iter()
+      .map(|w| Matrix::new(w.shape().0, w.shape().1))
+      .collect();
+    for (expectation, input) in training_data {
+      let (nabla_biases_n, nabla_weights_n) =
+        self.backdrop_once(input.clone(), expectation.clone());
+      nabla_biases = nabla_biases
+        .into_iter()
+        .zip(nabla_biases_n.iter())
+        .map(|(sum_nb, nbn)| &sum_nb + nbn)
+        .collect();
+      nabla_weights = nabla_weights
+        .into_iter()
+        .zip(nabla_weights_n.iter())
+        .map(|(sum_nw, nwn)| &sum_nw + nwn)
+        .collect();
+    }
+    nabla_biases = nabla_biases
+      .into_iter()
+      .map(|nb| nb.scale(1.0 / training_data.len() as f32))
+      .collect();
+    nabla_weights = nabla_weights
+      .into_iter()
+      .map(|nw| nw.scale(1.0 / training_data.len() as f32))
+      .collect();
+    (nabla_biases, nabla_weights)
+  }
+
+  pub fn train_once_by_batch(
+    &self,
+    training_data: &[(Matrix, Matrix)],
+    batch_size: usize,
+  ) -> (Vec<Matrix>, Vec<Matrix>) {
+    assert_eq!(training_data.len() % batch_size, 0);
+    let mut nabla_biases: Vec<_> = self
+      .biases
+      .iter()
+      .map(|b| Matrix::new(b.shape().0, b.shape().1))
+      .collect();
+    let mut nabla_weights: Vec<_> = self
+      .weights
+      .iter()
+      .map(|w| Matrix::new(w.shape().0, w.shape().1))
+      .collect();
+    for batch in training_data.chunks(batch_size) {
+      let (nabla_biases_n, nabla_weights_n) = self.train_once_all(batch);
+      nabla_biases = nabla_biases
+        .into_iter()
+        .zip(nabla_biases_n.iter())
+        .map(|(sum_nb, nbn)| &sum_nb + nbn)
+        .collect();
+      nabla_weights = nabla_weights
+        .into_iter()
+        .zip(nabla_weights_n.iter())
+        .map(|(sum_nw, nwn)| &sum_nw + nwn)
+        .collect();
+    }
+    nabla_biases = nabla_biases
+      .into_iter()
+      .map(|nb| nb.scale(1.0 / training_data.len() as f32))
+      .collect();
+    nabla_weights = nabla_weights
+      .into_iter()
+      .map(|nw| nw.scale(1.0 / training_data.len() as f32))
+      .collect();
     (nabla_biases, nabla_weights)
   }
 

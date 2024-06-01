@@ -3,6 +3,11 @@ mod matrix;
 mod model;
 mod numba;
 
+use std::{
+  io::{self, Write},
+  time::Instant,
+};
+
 use matrix::Matrix;
 use model::Model;
 use raylib::{color::Color, drawing::RaylibDraw, ffi::KeyboardKey};
@@ -13,32 +18,59 @@ fn main() {
     "MNIST/train-labels.idx1-ubyte".into(),
   );
 
+  let (data_with_expectations, data_with_labels): (Vec<_>, Vec<_>) =
+    labeled_images
+      .into_iter()
+      .map(|(label, expectation, image)| {
+        (
+          (expectation, image.to_linearized()),
+          (label, image.to_linearized()),
+        )
+      })
+      .unzip();
+
   let mut model = Model::new();
   model.add_layer(Matrix::random(16, 784), Matrix::random(16, 1));
   model.add_layer(Matrix::random(16, 16), Matrix::random(16, 1));
   model.add_layer(Matrix::random(10, 16), Matrix::random(10, 1));
 
-  let test_case = labeled_images[0].2.to_linearized();
-  let expectation = labeled_images[0].1.clone();
+  println!("Starting initial evaluation");
 
-  let mse_before = model.evaluate_one(test_case.clone(), expectation.clone());
-  let initial_result = model.apply(test_case.clone()).to_host().max_idx();
+  let init_eval_start = Instant::now();
+  let correct_guesses = model.evaluate_all(&data_with_labels);
+  let init_eval_end = Instant::now();
 
-  for i in 0..100 {
-    let upgrade = model.backdrop_once(test_case.clone(), expectation.clone());
-    // println!("Phase {i}");
-    // let upgrade_in_host: (Vec<_>, Vec<_>) = (
-    //   upgrade.0.iter().map(|x| x.to_host()).collect(),
-    //   upgrade.1.iter().map(|x| x.to_host()).collect(),
-    // );
-    // println!("{upgrade_in_host:?}");
-    model = model.upgrade(&upgrade.0, &upgrade.1, 0.1);
+  println!(
+    "Before training, the model guessed {}/{} images correctly ({}%) in {}ms",
+    correct_guesses,
+    data_with_labels.len(),
+    100.0 * correct_guesses as f32 / data_with_labels.len() as f32,
+    init_eval_end.duration_since(init_eval_start).as_millis()
+  );
+
+  for n in 0..30 {
+    print!("Phase {n}...");
+    io::stdout().flush().unwrap();
+    let phase_start = Instant::now();
+    let (nabla_biases, nabla_weights) =
+      model.train_once_all(&data_with_expectations);
+    model = model.upgrade(&nabla_biases, &nabla_weights, 0.1);
+    let phase_end = Instant::now();
+    println!(
+      " upgrade done ({}ms)",
+      phase_end.duration_since(phase_start).as_millis()
+    );
   }
-  let mse_after = model.evaluate_one(test_case.clone(), expectation.clone());
 
-  let result = model.apply(test_case.clone()).to_host().max_idx();
-
-  println!("MSE before: {mse_before}, MSE after: {mse_after}, initiali result: {initial_result}, final result: {result}");
+  println!("Training done!");
+  println!("Starting final evaluation");
+  let correct_guesses = model.evaluate_all(&data_with_labels);
+  println!(
+    "After training, the model guessed {}/{} images correctly ({}%)",
+    correct_guesses,
+    data_with_labels.len(),
+    100.0 * correct_guesses as f32 / data_with_labels.len() as f32
+  );
 }
 
 fn browse_images(labeled_images: &[(usize, Matrix)]) {

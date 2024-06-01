@@ -1,4 +1,5 @@
 /// CUDA API functions with a nice interface for Rust
+#include <iostream>
 
 extern "C" {
 void* numba_Allocate(size_t s) {
