@@ -115,9 +115,10 @@ impl Model {
   }
 
   pub fn train_once_all(
-    &self,
+    &mut self,
     training_data: &[(Matrix, Matrix)],
-  ) -> (Vec<Matrix>, Vec<Matrix>) {
+    rate: f32,
+  ) {
     let mut nabla_biases: Vec<_> = self
       .biases
       .iter()
@@ -150,70 +151,38 @@ impl Model {
       .into_iter()
       .map(|nw| nw.scale(1.0 / training_data.len() as f32))
       .collect();
-    (nabla_biases, nabla_weights)
+    self.upgrade(&nabla_biases, &nabla_weights, rate);
   }
 
   pub fn train_once_by_batch(
-    &self,
+    &mut self,
     training_data: &[(Matrix, Matrix)],
     batch_size: usize,
-  ) -> (Vec<Matrix>, Vec<Matrix>) {
+    rate: f32,
+  ) {
     assert_eq!(training_data.len() % batch_size, 0);
-    let mut nabla_biases: Vec<_> = self
-      .biases
-      .iter()
-      .map(|b| Matrix::new(b.shape().0, b.shape().1))
-      .collect();
-    let mut nabla_weights: Vec<_> = self
-      .weights
-      .iter()
-      .map(|w| Matrix::new(w.shape().0, w.shape().1))
-      .collect();
     for batch in training_data.chunks(batch_size) {
-      let (nabla_biases_n, nabla_weights_n) = self.train_once_all(batch);
-      nabla_biases = nabla_biases
-        .into_iter()
-        .zip(nabla_biases_n.iter())
-        .map(|(sum_nb, nbn)| &sum_nb + nbn)
-        .collect();
-      nabla_weights = nabla_weights
-        .into_iter()
-        .zip(nabla_weights_n.iter())
-        .map(|(sum_nw, nwn)| &sum_nw + nwn)
-        .collect();
+      self.train_once_all(batch, rate);
     }
-    nabla_biases = nabla_biases
-      .into_iter()
-      .map(|nb| nb.scale(1.0 / training_data.len() as f32))
-      .collect();
-    nabla_weights = nabla_weights
-      .into_iter()
-      .map(|nw| nw.scale(1.0 / training_data.len() as f32))
-      .collect();
-    (nabla_biases, nabla_weights)
   }
 
   pub fn upgrade(
-    &self,
+    &mut self,
     nabla_biases: &[Matrix],
     nabla_weights: &[Matrix],
     rate: f32,
-  ) -> Self {
-    let new_biases: Vec<_> = self
+  ) {
+    self.biases = self
       .biases
       .iter()
       .zip(nabla_biases.iter())
       .map(|(bias, nabla_bias)| bias - &nabla_bias.scale(rate))
       .collect();
-    let new_weights: Vec<_> = self
+    self.weights = self
       .weights
       .iter()
       .zip(nabla_weights.iter())
       .map(|(weight, nabla_weight)| weight - &nabla_weight.scale(rate))
       .collect();
-    Model {
-      weights: new_weights,
-      biases: new_biases,
-    }
   }
 }

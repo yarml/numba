@@ -48,16 +48,14 @@ fn main() {
     init_eval_end.duration_since(init_eval_start).as_millis()
   );
 
-  for n in 0..30 {
+  for n in 0..10 {
     print!("Phase {n}...");
     io::stdout().flush().unwrap();
     let phase_start = Instant::now();
-    let (nabla_biases, nabla_weights) =
-      model.train_once_all(&data_with_expectations);
-    model = model.upgrade(&nabla_biases, &nabla_weights, 0.1);
+    model.train_once_by_batch(&data_with_expectations, 100, 0.1);
     let phase_end = Instant::now();
     println!(
-      " upgrade done ({}ms)",
+      " ({}ms)",
       phase_end.duration_since(phase_start).as_millis()
     );
   }
