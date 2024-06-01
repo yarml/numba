@@ -1,4 +1,4 @@
-use std::ops::{Add, Index, IndexMut, Mul};
+use std::ops::{Add, Index, IndexMut, Mul, Sub};
 
 use rand::Rng;
 
@@ -6,6 +6,18 @@ use crate::cuda::CudaBox;
 
 extern "C" {
   fn numba_VecAdd(
+    dev_a: *const f32,
+    dev_b: *const f32,
+    dev_c: *const f32,
+    n: usize,
+  );
+  fn numba_VecSub(
+    dev_a: *const f32,
+    dev_b: *const f32,
+    dev_c: *const f32,
+    n: usize,
+  );
+  fn numba_VecMul(
     dev_a: *const f32,
     dev_b: *const f32,
     dev_c: *const f32,
@@ -20,6 +32,15 @@ extern "C" {
     r: usize,
   );
   fn numba_VecSigmoid(dev_a: *const f32, dev_b: *const f32, n: usize);
+  fn numba_VecSigmoidPrime(dev_a: *const f32, dev_b: *const f32, n: usize);
+  fn numba_VecDot(dev_a: *const f32, dev_b: *const f32, n: usize) -> f32;
+  fn numba_MatrixTranspose(
+    dev_a: *const f32,
+    dev_b: *const f32,
+    n: usize,
+    m: usize,
+  );
+  fn numba_VecScale(dev_a: *const f32, dev_b: *const f32, s: f32, n: usize);
 }
 
 #[derive(Clone)]
@@ -52,6 +73,18 @@ impl Matrix {
       data,
     }
   }
+  pub fn transpose(&self) -> Matrix {
+    let result = Matrix::new(self.cols, self.rows);
+    unsafe {
+      numba_MatrixTranspose(
+        self.data.as_ptr() as *const f32,
+        result.data.as_ptr() as *const f32,
+        self.rows,
+        self.cols,
+      );
+    }
+    result
+  }
 
   pub fn shape(&self) -> (usize, usize) {
     (self.rows, self.cols)
@@ -63,11 +96,66 @@ impl Matrix {
     result
   }
 
-  pub fn to_sigmoided(&self) -> Matrix {
+  pub fn sigmoid(&self) -> Matrix {
     let result = Matrix::new(self.rows, self.cols);
     unsafe {
       numba_VecSigmoid(
         self.data.as_ptr() as *const f32,
+        result.data.as_ptr() as *const f32,
+        self.rows * self.cols,
+      );
+    }
+    result
+  }
+  pub fn sigmoid_prime(&self) -> Matrix {
+    let result = Matrix::new(self.rows, self.cols);
+    unsafe {
+      numba_VecSigmoidPrime(
+        self.data.as_ptr() as *const f32,
+        result.data.as_ptr() as *const f32,
+        self.rows * self.cols,
+      );
+    }
+    result
+  }
+  pub fn dot(&self, other: &Matrix) -> f32 {
+    assert_eq!(self.rows, other.rows);
+    assert_eq!(self.cols, other.cols);
+    unsafe {
+      numba_VecDot(
+        self.data.as_ptr() as *const f32,
+        other.data.as_ptr() as *const f32,
+        self.rows * self.cols,
+      )
+    }
+  }
+  pub fn scale(&self, s: f32) -> Matrix {
+    let result = Matrix::new(self.rows, self.cols);
+    unsafe {
+      numba_VecScale(
+        self.data.as_ptr() as *const f32,
+        result.data.as_ptr() as *const f32,
+        s,
+        self.rows * self.cols,
+      );
+    }
+    result
+  }
+
+  pub fn mse(&self, other: &Matrix) -> f32 {
+    assert_eq!(self.rows, other.rows);
+    assert_eq!(self.cols, other.cols);
+    let diff = self - other;
+    diff.dot(&diff) * (1.0 / (self.rows * self.cols) as f32)
+  }
+  pub fn element_mul(&self, other: &Matrix) -> Matrix {
+    assert_eq!(self.rows, other.rows);
+    assert_eq!(self.cols, other.cols);
+    let result = Matrix::new(self.rows, self.cols);
+    unsafe {
+      numba_VecMul(
+        self.data.as_ptr() as *const f32,
+        other.data.as_ptr() as *const f32,
         result.data.as_ptr() as *const f32,
         self.rows * self.cols,
       );
@@ -104,6 +192,20 @@ impl Matrix {
     }
     result
   }
+  fn impl_sub(&self, other: &Matrix) -> Matrix {
+    assert_eq!(self.rows, other.rows);
+    assert_eq!(self.cols, other.cols);
+    let result = Matrix::new(self.rows, self.cols);
+    unsafe {
+      numba_VecSub(
+        self.data.as_ptr() as *const f32,
+        other.data.as_ptr() as *const f32,
+        result.data.as_ptr() as *const f32,
+        self.rows * self.cols,
+      );
+    }
+    result
+  }
 }
 
 impl Mul for Matrix {
@@ -119,8 +221,35 @@ impl Add for Matrix {
     self.impl_add(&rhs)
   }
 }
+impl Sub for Matrix {
+  type Output = Matrix;
 
-#[derive(Debug)]
+  fn sub(self, rhs: Self) -> Self::Output {
+    self.impl_sub(&rhs)
+  }
+}
+impl Mul for &Matrix {
+  type Output = Matrix;
+  fn mul(self, other: Self) -> Self::Output {
+    self.impl_mul(other)
+  }
+}
+impl Add for &Matrix {
+  type Output = Matrix;
+
+  fn add(self, rhs: Self) -> Self::Output {
+    self.impl_add(rhs)
+  }
+}
+impl Sub for &Matrix {
+  type Output = Matrix;
+
+  fn sub(self, rhs: Self) -> Self::Output {
+    self.impl_sub(rhs)
+  }
+}
+
+#[derive(Debug, Clone)]
 pub struct MatrixInHost {
   rows: usize,
   cols: usize,
