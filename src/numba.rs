@@ -6,10 +6,11 @@ use std::{
 
 use crate::matrix::{Matrix, MatrixInHost};
 
+// Returns (label<1>, expected_output<10x1>, image<28x28>)
 pub fn load_labeled_images(
   images_path: PathBuf,
   labels_path: PathBuf,
-) -> Vec<(usize, Matrix)> {
+) -> Vec<(usize, Matrix, Matrix)> {
   let mut images = BufReader::new(File::open(images_path).unwrap());
   let mut labels = BufReader::new(File::open(labels_path).unwrap());
 
@@ -55,13 +56,19 @@ pub fn load_labeled_images(
       labels.read_exact(&mut label).unwrap();
       label[0] as usize
     };
+    let mut expected_output = MatrixInHost::new(10, 1);
+    expected_output[(label, 0)] = 1.0;
     let mut matrix = MatrixInHost::new(rows, cols);
     for j in 0..cols {
       for i in 0..rows {
         matrix[(i, j)] = pixels[j * cols + i] as f32 / 255.0;
       }
     }
-    labeled_images.push((label, matrix.to_device()));
+    labeled_images.push((
+      label,
+      expected_output.to_device(),
+      matrix.to_device(),
+    ));
   }
 
   labeled_images

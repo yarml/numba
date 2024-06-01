@@ -18,11 +18,27 @@ fn main() {
   model.add_layer(Matrix::random(16, 16), Matrix::random(16, 1));
   model.add_layer(Matrix::random(10, 16), Matrix::random(10, 1));
 
-  let output = model
-    .evaluate(labeled_images[0].1.to_linearized())
-    .to_host();
-  println!("{:?}", output);
-  println!("Most likely: {}", output.max_idx());
+  let test_case = labeled_images[0].2.to_linearized();
+  let expectation = labeled_images[0].1.clone();
+
+  let mse_before = model.evaluate_one(test_case.clone(), expectation.clone());
+  let initial_result = model.apply(test_case.clone()).to_host().max_idx();
+
+  for i in 0..100 {
+    let upgrade = model.backdrop_once(test_case.clone(), expectation.clone());
+    // println!("Phase {i}");
+    // let upgrade_in_host: (Vec<_>, Vec<_>) = (
+    //   upgrade.0.iter().map(|x| x.to_host()).collect(),
+    //   upgrade.1.iter().map(|x| x.to_host()).collect(),
+    // );
+    // println!("{upgrade_in_host:?}");
+    model = model.upgrade(&upgrade.0, &upgrade.1, 0.1);
+  }
+  let mse_after = model.evaluate_one(test_case.clone(), expectation.clone());
+
+  let result = model.apply(test_case.clone()).to_host().max_idx();
+
+  println!("MSE before: {mse_before}, MSE after: {mse_after}, initiali result: {initial_result}, final result: {result}");
 }
 
 fn browse_images(labeled_images: &[(usize, Matrix)]) {
