@@ -1,5 +1,4 @@
 /// CUDA API functions with a nice interface for Rust
-#include <iostream>
 
 extern "C" {
 void* numba_Allocate(size_t s) {
@@ -10,6 +9,18 @@ void* numba_Allocate(size_t s) {
 
 void numba_Free(void* ptr) {
   cudaFree(ptr);
+}
+
+void numba_BenchmarkAllocate(void **ptrs, size_t s, size_t N) {
+  for(size_t i = 0; i < N; i++) {
+    cudaMalloc(ptrs + i, s);
+  }
+}
+
+void numba_BenchmarkFree(void **ptrs, size_t N) {
+  for(size_t i = 0; i < N; i++) {
+    cudaFree(ptrs + i);
+  }
 }
 
 void numba_CopyToDevice(void* devDst, void* hostSrc, size_t s) {

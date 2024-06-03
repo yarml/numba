@@ -13,6 +13,7 @@ use model::Model;
 use raylib::{color::Color, drawing::RaylibDraw, ffi::KeyboardKey};
 
 fn main() {
+
   let labeled_images = numba::load_labeled_images(
     "MNIST/train-images.idx3-ubyte".into(),
     "MNIST/train-labels.idx1-ubyte".into(),
@@ -48,16 +49,13 @@ fn main() {
     init_eval_end.duration_since(init_eval_start).as_millis()
   );
 
-  for n in 0..10 {
+  for n in 0..1 {
     print!("Phase {n}...");
     io::stdout().flush().unwrap();
     let phase_start = Instant::now();
     model.train_once_by_batch(&data_with_expectations, 100, 0.1);
     let phase_end = Instant::now();
-    println!(
-      " ({}ms)",
-      phase_end.duration_since(phase_start).as_millis()
-    );
+    println!(" ({}ms)", phase_end.duration_since(phase_start).as_millis());
   }
 
   println!("Training done!");
